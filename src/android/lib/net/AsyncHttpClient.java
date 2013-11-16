@@ -39,6 +39,11 @@ import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Message;
 
+/**
+ * An <a href="http://developer.android.com/reference/org/apache/http/client/HttpClient.html">HttpClient</a>
+ * implementation that performs HTTP GET and POST on a non-blocking thread.
+ * <p>For convenience, {@link AsyncHttpClient} ignores any SSL certification errors.</p>
+ */
 public final class AsyncHttpClient {
     private static final String HTTP             = "http"; //$NON-NLS-1$
     private static final String HTTPS            = "https"; //$NON-NLS-1$
@@ -51,6 +56,12 @@ public final class AsyncHttpClient {
     private AsyncHttpClient() {
     }
 
+    /**
+     * Performs HTTP GET asynchronously.
+     * @param uri the URI to get.
+     * @param parameters the parameters to append to the URI.
+     * @param listener a callback when the operation completes or when there is an error.
+     */
     public static void get(final String uri, final Map<String, String> parameters, final HttpEventListener listener) {
         final Uri.Builder builder = Uri.parse(uri).buildUpon();
 
@@ -61,6 +72,12 @@ public final class AsyncHttpClient {
         AsyncHttpClient.execute(new HttpGet(builder.build().toString()), listener);
     }
 
+    /**
+     * Performs HTTP POST asynchronously.
+     * @param uri the URI to post.
+     * @param parameters the FORM data to post.
+     * @param listener a callback when the operation completes or when there is an error.
+     */
     public static void post(final String uri, final Map<String, String> parameters, final HttpEventListener listener) {
         final List<NameValuePair> pairs = new ArrayList<NameValuePair>();
 
