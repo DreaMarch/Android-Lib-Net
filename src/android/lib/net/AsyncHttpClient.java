@@ -2,12 +2,6 @@ package android.lib.net;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.security.KeyManagementException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,23 +9,13 @@ import java.util.Map;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
-import org.apache.http.HttpVersion;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.conn.scheme.PlainSocketFactory;
-import org.apache.http.conn.scheme.Scheme;
-import org.apache.http.conn.scheme.SchemeRegistry;
-import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.params.BasicHttpParams;
-import org.apache.http.params.HttpConnectionParams;
-import org.apache.http.params.HttpParams;
-import org.apache.http.params.HttpProtocolParams;
 
 import android.net.Uri;
 import android.net.http.AndroidHttpClient;
@@ -45,15 +29,16 @@ import android.os.Message;
  * <p>For convenience, {@link AsyncHttpClient} ignores any SSL certification errors.</p>
  */
 public final class AsyncHttpClient {
-    private static final String HTTP             = "http"; //$NON-NLS-1$
-    private static final String HTTPS            = "https"; //$NON-NLS-1$
-    private static final String VALUE_USER_AGENT = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)"; //$NON-NLS-1$
-
-    private static final int HTTP_PORT  = 80;
-    private static final int HTTPS_PORT = 443;
-    private static final int TIMEOUT    = 30000;
-
     private AsyncHttpClient() {
+    }
+
+    /**
+     * Performs HTTP GET asynchronously.
+     * @param url the URL to get.
+     * @param listener a callback when the operation completes or when there is an error.
+     */
+    public static void get(final String url, final HttpEventListener listener) {
+        AsyncHttpClient.get(url, null, listener);
     }
 
     /**
@@ -65,11 +50,22 @@ public final class AsyncHttpClient {
     public static void get(final String uri, final Map<String, String> parameters, final HttpEventListener listener) {
         final Uri.Builder builder = Uri.parse(uri).buildUpon();
 
-        for (final Map.Entry<String, String> parameter : parameters.entrySet()) {
-            builder.appendQueryParameter(parameter.getKey(), parameter.getValue());
+        if (parameters != null) {
+            for (final Map.Entry<String, String> parameter : parameters.entrySet()) {
+                builder.appendQueryParameter(parameter.getKey(), parameter.getValue());
+            }
         }
 
         AsyncHttpClient.execute(new HttpGet(builder.build().toString()), listener);
+    }
+
+    /**
+     * Performs HTTP POST asynchronously.
+     * @param url the URL to post.
+     * @param listener a callback when the operation completes or when there is an error.
+     */
+    public static void post(final String url, final HttpEventListener listener) {
+        AsyncHttpClient.post(url, null, listener);
     }
 
     /**
@@ -79,18 +75,20 @@ public final class AsyncHttpClient {
      * @param listener a callback when the operation completes or when there is an error.
      */
     public static void post(final String uri, final Map<String, String> parameters, final HttpEventListener listener) {
-        final List<NameValuePair> pairs = new ArrayList<NameValuePair>();
-
-        for (final Map.Entry<String, String> parameter : parameters.entrySet()) {
-            pairs.add(new BasicNameValuePair(parameter.getKey(), parameter.getValue()));
-        }
-
         final HttpPost request = new HttpPost(uri);
 
-        try {
-            request.setEntity(new UrlEncodedFormEntity(pairs, org.apache.http.protocol.HTTP.UTF_8));
-        } catch (final UnsupportedEncodingException e) {
-            throw new RuntimeException(e);
+        if (parameters != null) {
+            final List<NameValuePair> pairs = new ArrayList<NameValuePair>();
+
+            for (final Map.Entry<String, String> parameter : parameters.entrySet()) {
+                pairs.add(new BasicNameValuePair(parameter.getKey(), parameter.getValue()));
+            }
+
+            try {
+                request.setEntity(new UrlEncodedFormEntity(pairs, org.apache.http.protocol.HTTP.UTF_8));
+            } catch (final UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         AsyncHttpClient.execute(request, listener);
@@ -102,7 +100,7 @@ public final class AsyncHttpClient {
         new AsyncTask<HttpUriRequest, Void, Message>() {
             @Override
             protected Message doInBackground(final HttpUriRequest... requests) {
-                final DefaultHttpClient client = AsyncHttpClient.createHttpClient();
+                final DefaultHttpClient client = HttpClient.createHttpClient();
 
                 AndroidHttpClient.modifyRequestToAcceptGzipResponse(request);
 
@@ -126,43 +124,6 @@ public final class AsyncHttpClient {
                 handler.sendMessage(message);
             }
         }.execute(request);
-    }
-
-    protected static DefaultHttpClient createHttpClient() {
-        final HttpParams params = new BasicHttpParams();
-
-        HttpProtocolParams.setVersion(params, HttpVersion.HTTP_1_1);
-        HttpProtocolParams.setContentCharset(params, org.apache.http.protocol.HTTP.UTF_8);
-        HttpProtocolParams.setUseExpectContinue(params, true);
-        HttpProtocolParams.setUserAgent(params, AsyncHttpClient.VALUE_USER_AGENT);
-        HttpConnectionParams.setConnectionTimeout(params, AsyncHttpClient.TIMEOUT);
-        HttpConnectionParams.setSoTimeout(params, AsyncHttpClient.TIMEOUT);
-
-        try {
-            final KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            keyStore.load(null, null);
-
-            final SSLSocketFactory factory = new TrustAllSSLSocketFactory(keyStore);
-            factory.setHostnameVerifier(SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
-
-            final SchemeRegistry registry = new SchemeRegistry();
-            registry.register(new Scheme(AsyncHttpClient.HTTP, PlainSocketFactory.getSocketFactory(), AsyncHttpClient.HTTP_PORT));
-            registry.register(new Scheme(AsyncHttpClient.HTTPS, factory, AsyncHttpClient.HTTPS_PORT));
-
-            return new DefaultHttpClient(new ThreadSafeClientConnManager(params, registry), params);
-        } catch (final KeyStoreException e) {
-            throw new RuntimeException(e);
-        } catch (final NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        } catch (final CertificateException e) {
-            throw new RuntimeException(e);
-        } catch (final IOException e) {
-            throw new RuntimeException(e);
-        } catch (final KeyManagementException e) {
-            throw new RuntimeException(e);
-        } catch (final UnrecoverableKeyException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     private static Handler createHandler(final HttpEventListener listener) {
